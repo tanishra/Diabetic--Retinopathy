@@ -1,11 +1,28 @@
+import pickle
 import streamlit as st
-import tensorflow as tf
-from tensorflow.keras.preprocessing import image # type: ignore
 import numpy as np
 from PIL import Image
 
 # Load the trained model
-model = tf.keras.models.load_model('model.h5')
+model_path = 'model.pkl'
+
+# Function to load the model
+def load_model(model_path):
+    try:
+        with open(model_path, 'rb') as file:
+            model = pickle.load(file)
+            return model
+    except Exception as e:
+        st.error(f"Error loading model: {e}")
+        st.stop()
+
+# Load the model
+model = load_model(model_path)
+
+# Check if the model is valid
+if not hasattr(model, 'predict'):
+    st.error("The loaded model does not have a 'predict' method. Please check the model file.")
+    st.stop()
 
 # Define a dictionary to map label indices to categories
 labels_dict = {
@@ -18,7 +35,6 @@ labels_dict = {
 
 # Streamlit UI
 st.title("Diabetic Retinopathy Detection")
-
 st.write("Upload a retina image to detect diabetic retinopathy.")
 
 # Image uploader
@@ -31,19 +47,27 @@ if uploaded_file is not None:
     
     # Preprocess the image
     img = image.resize((224, 224))  # Resize the image to match model input size
-    img_array = np.array(img)       # Convert the image to a numpy array
-    img_array = img_array / 255.0   # Normalize pixel values
+    img_array = np.array(img)        # Convert the image to a numpy array
+    img_array = img_array / 255.0    # Normalize pixel values
     img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
     
-    # Make prediction
-    prediction = model.predict(img_array)
-    predicted_class = np.argmax(prediction, axis=1)[0]
-    
-    # Display the prediction
-    st.write(f"Prediction: {labels_dict[predicted_class]}")
+    # Ensure the image array has the correct shape
+    if img_array.shape != (1, 224, 224, 3):
+        st.error(f"Invalid input shape: {img_array.shape}. Expected shape: (1, 224, 224, 3).")
+    else:
+        # Make prediction
+        if st.button("Predict"):
+            try:
+                prediction = model.predict(img_array)  # Get raw predictions
+                predicted_class = np.argmax(prediction, axis=1)[0]  # Get the index of the class with the highest probability
+                
+                # Display the prediction
+                st.write(f"Prediction: {labels_dict[predicted_class]}")
 
-    # Show confidence scores
-    st.write("Confidence scores:")
-    for i, score in enumerate(prediction[0]):
-        st.write(f"{labels_dict[i]}: {score*100:.2f}%")
+                # Show confidence scores
+                st.write("Confidence scores:")
+                for i, score in enumerate(prediction[0]):
+                    st.write(f"{labels_dict[i]}: {score * 100:.2f}%")
 
+            except Exception as e:
+                st.error(f"Error making prediction: {e}")
